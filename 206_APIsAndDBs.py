@@ -176,7 +176,14 @@ for item in cur:
 joined_data2 = []
 cur.execute("SELECT screen_name, tweet_text from Users INNER JOIN Tweets on Tweets.user_posted = Users.user_id ORDER BY Tweets.retweets")
 
+### IMPORTANT: MAKE SURE TO CLOSE YOUR DATABASE CONNECTION AT THE END
+### OF THE FILE HERE SO YOU DO NOT LOCK YOUR DATABASE (it's fixable,
+### but it's a pain). ###
 
+###### TESTS APPEAR BELOW THIS LINE ######
+###### Note that the tests are necessary to pass, but not sufficient --
+###### must make sure you've followed the instructions accurately!
+######
 ### IMPORTANT: MAKE SURE TO CLOSE YOUR DATABASE CONNECTION AT THE END
 ### OF THE FILE HERE SO YOU DO NOT LOCK YOUR DATABASE (it's fixable,
 ### but it's a pain). ###
