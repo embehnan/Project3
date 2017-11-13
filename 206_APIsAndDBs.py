@@ -18,7 +18,7 @@ import twitter_info # same deal as always...
 import json
 import sqlite3
 
-## Your name:
+## Your name: Emily Behnan
 ## The names of anyone you worked with on this project:
 
 #####
@@ -49,20 +49,46 @@ api = tweepy.API(auth, parser=tweepy.parsers.JSONParser())
 
 CACHE_FNAME = "206_APIsAndDBs_cache.json"
 # Put the rest of your caching setup here:
-
-
+try:
+    cache_file = open(CACHE_FNAME,'r')
+    cache_contents = cache_file.read()
+    cache_file.close()
+    CACHE_DICTION = json.loads(cache_contents)
+except:
+    CACHE_DICTION = {}
 
 # Define your function get_user_tweets here:
-
-
-
-
+def get_user_tweets(user):
+	tweets = api.user_timeline(user)
+	for tweet in tweets:
+		if tweet['id'] not in CACHE_DICTION:	# if tweet has not already been cached
+			CACHE_DICTION[tweet['id']] = [tweet['user']['id'], tweet['user']['screen_name'], tweet['created_at'], tweet['text'], tweet['retweet_count'], tweet['entities']['user_mentions'], tweet['user']['favourites_count'], tweet['user']['description']]
+	file = open(CACHE_FNAME, "w")	# add new tweet to local CACHE_DICTION and write to cache file
+	file.write(json.dumps(CACHE_DICTION))  # write cache dictionary to file
+	file.close()
+	# must declare cur and conn before this function is called
+	# below lines insert newly cached data into tables Users and Tweets
+	for tweet in CACHE_DICTION:
+		cur.execute('SELECT * from Users WHERE user_id=?', (str(CACHE_DICTION[tweet][0]),))	# make sure user is not already in Users
+		if not cur.fetchone():
+			cur.execute('INSERT INTO Users(user_id, screen_name, num_favs, description) VALUES(?, ?, ?, ?)', (CACHE_DICTION[tweet][0], CACHE_DICTION[tweet][1], CACHE_DICTION[tweet][6], CACHE_DICTION[tweet][7]))
+		user_mentions = CACHE_DICTION[tweet][5]	# insert posted user and all its columns
+		for i in range(len(user_mentions)):	# insert each user mentioned in tweets if they are not already in Users
+			cur.execute('SELECT * from Users WHERE user_id=?', (str(user_mentions[i]['id']),))
+			if not cur.fetchone():
+				cur.execute('INSERT INTO Users(user_id, screen_name, num_favs, description) VALUES(?, ?, ?, ?)', (user_mentions[i]['id'], user_mentions[i]['screen_name'], CACHE_DICTION[tweet][6], CACHE_DICTION[tweet][7]))
+	for tweet in CACHE_DICTION:
+		cur.execute('SELECT * from Tweets WHERE tweet_id=?', (str(tweet),))	# if tweet not in Tweets
+		if not cur.fetchone():
+			cur.execute('INSERT INTO Tweets(tweet_id, tweet_text, user_posted, time_posted, retweets) VALUES(?, ?, ?, ?, ?)', (tweet, CACHE_DICTION[tweet][3], CACHE_DICTION[tweet][0], CACHE_DICTION[tweet][2], CACHE_DICTION[tweet][4]))
+	conn.commit()	# insert new tweet and its columns into Tweets and commit changes to database
+	l = []
+	for k in CACHE_DICTION.keys():	# make CACHE_DICTION a list and return
+		l.append({k:CACHE_DICTION[k]})
+	return l
 
 # Write an invocation to the function for the "umich" user timeline and
 # save the result in a variable called umich_tweets:
-
-
-
 
 ## Task 2 - Creating database and loading data into database
 ## You should load into the Users table:
@@ -71,16 +97,21 @@ CACHE_FNAME = "206_APIsAndDBs_cache.json"
 # NOTE: For example, if the user with the "TedXUM" screen name is
 # mentioned in the umich timeline, that Twitter user's info should be
 # in the Users table, etc.
-
-
+conn = sqlite3.connect('206_APIsAndDBs.sqlite')
+cur = conn.cursor()
+cur.execute("DROP TABLE IF EXISTS Users")	# create table Users
+cur.execute("CREATE TABLE Users(user_id INTEGER, screen_name VARCHAR(128), num_favs INTEGER, description VARCHAR(128), PRIMARY KEY(user_id), FOREIGN KEY(user_id) REFERENCES Tweets(user_posted))")
 
 ## You should load into the Tweets table:
 # Info about all the tweets (at least 20) that you gather from the
 # umich timeline.
 # NOTE: Be careful that you have the correct user ID reference in
 # the user_id column! See below hints.
+cur.execute("DROP TABLE IF EXISTS Tweets")	# create table Tweets
+cur.execute("CREATE TABLE Tweets(tweet_id VARCHAR(128), tweet_text VARCHAR(128), user_posted INTEGER, time_posted TIMESTAMP, retweets INTEGER, PRIMARY KEY(tweet_id), FOREIGN KEY(user_posted) REFERENCES Users(user_id))")
+conn.commit()
 
-
+umich_tweets = get_user_tweets('umich')
 ## HINT: There's a Tweepy method to get user info, so when you have a
 ## user id or screenname you can find alllll the info you want about
 ## the user.
@@ -99,39 +130,51 @@ CACHE_FNAME = "206_APIsAndDBs_cache.json"
 # Make a query to select all of the records in the Users database.
 # Save the list of tuples in a variable called users_info.
 
-users_info = True
+users_info = []
+cur.execute("SELECT * from Users")
+for item in cur:
+	users_info.append(item)
 
 # Make a query to select all of the user screen names from the database.
 # Save a resulting list of strings (NOT tuples, the strings inside them!)
 # in the variable screen_names. HINT: a list comprehension will make
 # this easier to complete!
-screen_names = True
-
+screen_names = []
+cur.execute("SELECT screen_name from Users")
+for item in cur:
+	screen_names.append(str(item))
 
 # Make a query to select all of the tweets (full rows of tweet information)
 # that have been retweeted more than 10 times. Save the result
 # (a list of tuples, or an empty list) in a variable called retweets.
-retweets = True
-
+retweets = []
+cur.execute("SELECT * from Tweets WHERE retweets>10")
+for item in cur:
+	retweets.append(item)
 
 # Make a query to select all the descriptions (descriptions only) of
 # the users who have favorited more than 500 tweets. Access all those
 # strings, and save them in a variable called favorites,
 # which should ultimately be a list of strings.
-favorites = True
-
+favorites = []
+cur.execute("SELECT description from Users WHERE num_favs>500")
+for item in cur:
+	favorites.append(str(item))
 
 # Make a query using an INNER JOIN to get a list of tuples with 2
 # elements in each tuple: the user screenname and the text of the
-# tweet. Save the resulting list of tuples in a variable called joined_data2.
-joined_data = True
+# tweet. Save the resulting list of tuples in a variable called joined_data.
+joined_data = []
+cur.execute("SELECT screen_name, tweet_text from Users INNER JOIN Tweets on Tweets.user_posted = Users.user_id")
+for item in cur:
+	joined_data.append(item)
 
 # Make a query using an INNER JOIN to get a list of tuples with 2
 # elements in each tuple: the user screenname and the text of the
 # tweet in descending order based on retweets. Save the resulting
 # list of tuples in a variable called joined_data2.
-
-joined_data2 = True
+joined_data2 = []
+cur.execute("SELECT screen_name, tweet_text from Users INNER JOIN Tweets on Tweets.user_posted = Users.user_id ORDER BY Tweets.retweets")
 
 
 ### IMPORTANT: MAKE SURE TO CLOSE YOUR DATABASE CONNECTION AT THE END
@@ -142,6 +185,15 @@ joined_data2 = True
 ###### Note that the tests are necessary to pass, but not sufficient --
 ###### must make sure you've followed the instructions accurately!
 ######
+### IMPORTANT: MAKE SURE TO CLOSE YOUR DATABASE CONNECTION AT THE END
+### OF THE FILE HERE SO YOU DO NOT LOCK YOUR DATABASE (it's fixable,
+### but it's a pain). ###
+
+###### TESTS APPEAR BELOW THIS LINE ######
+###### Note that the tests are necessary to pass, but not sufficient --
+###### must make sure you've followed the instructions accurately!
+######
+
 print("\n\nBELOW THIS LINE IS OUTPUT FROM TESTS:\n")
 
 
